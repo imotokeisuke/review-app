@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ChronoQuiz - スプレッドシート復習アプリ</title>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+JP:wght@400;500;700&display=swap"
+        rel="stylesheet">
+    <!-- Boxicons -->
+    <link href='https://unpkg.com/boxicons@2.1.4/css/boxicons.min.css' rel='stylesheet'>
+    <link rel="stylesheet" href="styles.css">
+</head>
+
+<body>
+    <div id="particles-js"></div>
+    <div class="app-container">
+        <!-- Header -->
+        <header>
+            <div class="logo">
+                <i class='bx bx-brain'></i>
+                <span>ChronoQuiz</span>
+            </div>
+            <div style="display: flex; gap: 8px;">
+                <button id="list-btn" class="icon-btn" aria-label="List">
+                    <i class='bx bx-list-ul'></i>
+                </button>
+                <button id="history-btn" class="icon-btn" aria-label="History">
+                    <i class='bx bx-history'></i>
+                </button>
+                <button id="settings-btn" class="icon-btn" aria-label="Settings">
+                    <i class='bx bx-cog'></i>
+                </button>
+            </div>
+        </header>
+
+        <main>
+            <!-- Dashboard View -->
+            <section id="dashboard-view" class="view active">
+                <div class="glass-card welcome-card">
+                    <h1>Ready for Review?</h1>
+                    <p>今日の復習タスクを確認しましょう</p>
+
+                    <div class="stats-container">
+                        <div class="stat-box">
+                            <span class="stat-label">今日の復習</span>
+                            <span class="stat-value" id="today-tasks-count">-</span>
+                            <span class="stat-unit">問</span>
+                        </div>
+                    </div>
+
+                    <button id="start-quiz-btn" class="primary-btn pulse" disabled>
+                        <i class='bx bx-play'></i>
+                        <span>復習をはじめる</span>
+                    </button>
+                    <p class="status-message" id="dashboard-status">スプレッドシートからデータを読み込んでいます...</p>
+                </div>
+            </section>
+
+            <!-- Quiz View -->
+            <section id="quiz-view" class="view">
+                <div class="quiz-header">
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="quiz-progress-fill"></div>
+                    </div>
+                    <span class="question-counter">Question <span id="current-q-num">1</span>/<span
+                            id="total-q-num">3</span></span>
+                </div>
+
+                <div class="glass-card question-card">
+                    <h2 id="question-text">読み込み中...</h2>
+                </div>
+
+                <div class="answer-section">
+                    <textarea id="answer-input" placeholder="ここに回答を入力してください..." rows="5"></textarea>
+                    <button id="submit-answer-btn" class="primary-btn">
+                        <span>回答を送信</span>
+                        <i class='bx bx-send'></i>
+                    </button>
+                </div>
+            </section>
+
+            <!-- Loading API View -->
+            <section id="loading-view" class="view">
+                <div class="glass-card loading-card">
+                    <div class="spinner"></div>
+                    <h2>AIが添削中...</h2>
+                    <p>Geminiがあなたの回答を分析しています。少々お待ちください。</p>
+                </div>
+            </section>
+
+            <!-- Result View -->
+            <section id="result-view" class="view">
+                <div class="quiz-header">
+                    <span class="question-counter">Result <span id="res-current-q-num">1</span>/<span
+                            id="res-total-q-num">3</span></span>
+                </div>
+
+                <div class="glass-card result-card">
+                    <div class="score-badge">
+                        <span id="ai-score" class="score-value">--</span>
+                        <span class="score-unit">/100</span>
+                    </div>
+
+                    <div class="feedback-section">
+                        <h3><i class='bx bx-message-rounded-dots'></i> AIからのフィードバック</h3>
+                        <p id="ai-feedback-text" class="feedback-text">読み込み中...</p>
+                    </div>
+
+                    <div class="comparison-section">
+                        <div class="user-answer-box">
+                            <h4>あなたの回答</h4>
+                            <p id="user-answer-display"></p>
+                        </div>
+                        <div class="correct-answer-box">
+                            <h4>模範解答・解説</h4>
+                            <p id="correct-answer-display"></p>
+                        </div>
+                    </div>
+
+                    <button id="next-question-btn" class="primary-btn">
+                        <span>次の問題へ</span>
+                        <i class='bx bx-right-arrow-alt'></i>
+                    </button>
+                    <button id="finish-quiz-btn" class="success-btn" style="display: none;">
+                        <span>復習を完了する</span>
+                        <i class='bx bx-check'></i>
+                    </button>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- Settings Modal -->
+    <div id="settings-modal" class="modal">
+        <div class="modal-content glass-card">
+            <div class="modal-header">
+                <h2>設定</h2>
+                <button id="close-settings-btn" class="icon-btn">
+                    <i class='bx bx-x'></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label for="gas-url">
+                        GAS API URL
+                        <span class="tooltip" data-tooltip="スプレッドシート連携用のGAS WebアプリURL"><i
+                                class='bx bx-info-circle'></i></span>
+                    </label>
+                    <input type="text" id="gas-url" placeholder="https://script.google.com/macros/s/...">
+                </div>
+                <div class="form-group">
+                    <label for="gemini-key">
+                        Gemini API Key
+                        <span class="tooltip" data-tooltip="AI添削用。取得はGoogle AI Studioから"><i
+                                class='bx bx-info-circle'></i></span>
+                    </label>
+                    <input type="password" id="gemini-key" placeholder="AIzaSy...">
+                </div>
+                <div class="form-group">
+                    <label for="question-count">出題数</label>
+                    <input type="number" id="question-count" min="1" max="20" value="3">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button id="save-settings-btn" class="primary-btn">保存</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- History Modal -->
+    <div id="history-modal" class="modal">
+        <div class="modal-content glass-card"
+            style="max-width: 500px; max-height: 80vh; display: flex; flex-direction: column;">
+            <div class="modal-header">
+                <h2>復習履歴</h2>
+                <button id="close-history-btn" class="icon-btn">
+                    <i class='bx bx-x'></i>
+                </button>
+            </div>
+            <div class="modal-body" id="history-list" style="overflow-y: auto; flex-grow: 1;">
+                <!-- History items will be injected here -->
+                <p style="text-align: center; color: var(--text-muted); padding: 20px;">履歴がありません</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Spreadsheet List Modal -->
+    <div id="list-modal" class="modal">
+        <div class="modal-content glass-card"
+            style="max-width: 600px; max-height: 80vh; display: flex; flex-direction: column;">
+            <div class="modal-header">
+                <h2>全データ一覧</h2>
+                <button id="close-list-btn" class="icon-btn">
+                    <i class='bx bx-x'></i>
+                </button>
+            </div>
+            <div class="modal-body" id="data-list" style="overflow-y: auto; flex-grow: 1;">
+                <p style="text-align: center; color: var(--text-muted); padding: 20px;">データがありません</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Notification -->
+    <div id="toast-container"></div>
+
+    <!-- Particles.js for background animation -->
+    <script src="https://cdn.jsdelivr.net/particles.js/2.0.0/particles.min.js"></script>
+    <script src="app.js"></script>
+</body>
+
+</html>
