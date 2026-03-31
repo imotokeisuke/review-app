@@ -9,7 +9,9 @@ const state = {
     quizQuestions: [],
     currentQuestionIndex: 0,
     answersContext: [], // For sending completion back to GAS
-    history: [] // Saved locally
+    history: [], // Saved locally
+    currentGeneratedData: null,
+    selectedChoices: new Set()
 };
 
 // DOM Elements
@@ -28,8 +30,12 @@ const dom = {
 
     // Quiz
     questionText: document.getElementById('question-text'),
-    answerInput: document.getElementById('answer-input'),
+    choicesContainer: document.getElementById('choices-container'),
     submitAnswerBtn: document.getElementById('submit-answer-btn'),
+    
+    // Loading
+    loadingTitle: document.getElementById('loading-title'),
+    loadingDesc: document.getElementById('loading-desc'),
     quizProgress: document.getElementById('quiz-progress-fill'),
     currentQNum: document.getElementById('current-q-num'),
     totalQNum: document.getElementById('total-q-num'),
@@ -244,54 +250,43 @@ function processRawQuestions() {
     }
 }
 
-function startQuiz() {
+async function startQuiz() {
     state.currentQuestionIndex = 0;
     state.answersContext = [];
-    renderQuizQuestion();
-    switchView('quiz');
+    await generateAndShowQuestion();
 }
 
-function renderQuizQuestion() {
-    const q = state.quizQuestions[state.currentQuestionIndex];
-    dom.currentQNum.textContent = state.currentQuestionIndex + 1;
-    dom.totalQNum.textContent = state.quizQuestions.length;
-
-    const progressPercent = ((state.currentQuestionIndex) / state.quizQuestions.length) * 100;
-    dom.quizProgress.style.width = `${progressPercent}%`;
-
-    dom.questionText.textContent = q.question;
-    dom.answerInput.value = '';
-    dom.answerInput.focus();
-}
-
-async function submitAnswer() {
-    const userAnswer = dom.answerInput.value.trim();
-    if (!userAnswer) {
-        showToast('回答を入力してください');
-        return;
-    }
-
+async function generateAndShowQuestion() {
     switchView('loading');
+    dom.loadingTitle.textContent = 'AIが問題を作成中...';
+    dom.loadingDesc.textContent = 'トピックに合わせた最適な4択問題を生成しています。少々お待ちください。';
 
     const q = state.quizQuestions[state.currentQuestionIndex];
-
+    
     if (!state.settings.geminiKey) {
-        // AIなしのフォールバック
-        setTimeout(() => showResult(userAnswer, 0, "Gemini APIキーが設定されていないため、添削はスキップされました。自己採点してください。"), 1000);
+        state.currentGeneratedData = {
+            question: q.question || "ダミー問題: 次のうち正しいものをすべて選んでください。",
+            choices: ["選択肢A", "選択肢B", "選択肢C", "選択肢D"],
+            correctIndices: [0, 2],
+            explanation: "APIキーが設定されていないためダミーデータです。"
+        };
+        renderQuizQuestion();
+        switchView('quiz');
         return;
     }
 
     const promptText = `
-あなたはプロのIT学習メンターです。以下の「問題」「模範解答（および解説）」と、生徒の「回答」を比較し、添削を行ってください。
+あなたはプロのIT学習メンターであり、クイズ作成者です。
+生徒の復習トピック「${q.topic || q.question}」（可能なら元の模範解答の文脈「${q.answer || ''}」も考慮）に基づいて、新しく「4択問題」を1つ作成してください。
+正解となる選択肢の数は「1個〜4個」のいずれかでランダムになるように設定してください。
+
 必ず以下のJSON形式でのみ出力してください（不要なバッククォートやマークダウンは除外してください）。
 {
-  "score": 採点スコア（0〜100の整数）,
-  "feedback": "生徒への建設的で分かりやすいフィードバック（数行程度）"
+  "question": "生徒に出題する問題文",
+  "choices": ["選択肢1", "選択肢2", "選択肢3", "選択肢4"],
+  "correctIndices": [0, 2], // 正解となる選択肢のインデックス（0始まり）の配列。1個〜4個含めること。
+  "explanation": "なぜその選択肢が正解/不正解なのかの分かりやすい解説"
 }
-
-問題: ${q.question}
-模範解答・解説: ${q.answer}
-生徒の回答: ${userAnswer}
 `;
 
     try {
@@ -306,19 +301,113 @@ async function submitAnswer() {
 
         if (!response.ok) throw new Error('Gemini API Error');
         const data = await response.json();
-
+        
         const candidateText = data.candidates[0].content.parts[0].text;
-        const result = JSON.parse(candidateText);
-
-        showResult(userAnswer, result.score || 0, result.feedback || "添削に失敗しました。");
+        state.currentGeneratedData = JSON.parse(candidateText);
+        
     } catch (error) {
         console.error('AI error:', error);
-        showResult(userAnswer, 0, "AI添削中にエラーが発生しました。");
+        state.currentGeneratedData = {
+            question: "【エラー】問題の生成に失敗しました。元の問題をそのまま表示します：\n" + q.question,
+            choices: ["正解となる選択肢", "ダミー選択肢1", "ダミー選択肢2", "ダミー選択肢3"],
+            correctIndices: [0],
+            explanation: q.answer || "解説データがありません。"
+        };
     }
+
+    renderQuizQuestion();
+    switchView('quiz');
 }
 
-function showResult(userAnswer, score, feedback) {
+function renderQuizQuestion() {
+    const genData = state.currentGeneratedData;
+    
+    dom.currentQNum.textContent = state.currentQuestionIndex + 1;
+    dom.totalQNum.textContent = state.quizQuestions.length;
+
+    const progressPercent = ((state.currentQuestionIndex) / state.quizQuestions.length) * 100;
+    dom.quizProgress.style.width = `${progressPercent}%`;
+
+    dom.questionText.textContent = genData.question;
+    
+    state.selectedChoices = new Set();
+    dom.submitAnswerBtn.disabled = true;
+
+    dom.choicesContainer.innerHTML = genData.choices.map((choice, i) => `
+        <div class="choice-card" data-index="${i}">
+            <div class="choice-checkbox">
+                <i class='bx bx-check'></i>
+            </div>
+            <div class="choice-text">${choice}</div>
+            <i class='bx choice-status-icon'></i>
+        </div>
+    `).join('');
+
+    const choiceCards = dom.choicesContainer.querySelectorAll('.choice-card');
+    choiceCards.forEach(card => {
+        card.addEventListener('click', () => {
+             const idx = parseInt(card.dataset.index);
+             if (state.selectedChoices.has(idx)) {
+                 state.selectedChoices.delete(idx);
+                 card.classList.remove('selected');
+             } else {
+                 state.selectedChoices.add(idx);
+                 card.classList.add('selected');
+             }
+             dom.submitAnswerBtn.disabled = state.selectedChoices.size === 0;
+        });
+    });
+}
+
+function submitAnswer() {
+    if (state.selectedChoices.size === 0) {
+        showToast('選択肢を選んでください');
+        return;
+    }
+
+    const genData = state.currentGeneratedData;
+    const correctSet = new Set(genData.correctIndices);
+    
+    let isFullyCorrect = true;
+    let correctlySelected = 0;
+    
+    const choiceCards = dom.choicesContainer.querySelectorAll('.choice-card');
+    
+    choiceCards.forEach(card => {
+        const idx = parseInt(card.dataset.index);
+        const isSelected = state.selectedChoices.has(idx);
+        const isCorrect = correctSet.has(idx);
+        
+        card.style.pointerEvents = 'none'; // disable clicks
+        const icon = card.querySelector('.choice-status-icon');
+        
+        if (isSelected && isCorrect) {
+            card.classList.add('correct-ans');
+            icon.classList.add('bx-check-circle');
+            correctlySelected++;
+        } else if (isSelected && !isCorrect) {
+            card.classList.add('incorrect-ans');
+            icon.classList.add('bx-x-circle');
+            isFullyCorrect = false;
+        } else if (!isSelected && isCorrect) {
+            card.classList.add('missed-ans');
+            isFullyCorrect = false;
+        }
+    });
+
+    const finalScore = isFullyCorrect ? 100 : Math.max(0, Math.round((correctlySelected / correctSet.size) * 100) - ((state.selectedChoices.size - correctlySelected) * 50));
+
+    const userAnsStr = Array.from(state.selectedChoices).map(i => genData.choices[i]).join(', ');
+    const correctAnsStr = genData.correctIndices.map(i => genData.choices[i]).join(', ');
+
+    setTimeout(() => {
+        showResult(userAnsStr, correctAnsStr, finalScore, genData.explanation);
+    }, 1500); 
+}
+
+function showResult(userAnswer, correctAnsStr, score, feedback) {
     const q = state.quizQuestions[state.currentQuestionIndex];
+    const genData = state.currentGeneratedData;
 
     dom.resCurrentQNum.textContent = state.currentQuestionIndex + 1;
     dom.resTotalQNum.textContent = state.quizQuestions.length;
@@ -328,14 +417,13 @@ function showResult(userAnswer, score, feedback) {
 
     dom.aiScore.textContent = score;
     dom.userAnswerDisplay.textContent = userAnswer;
-    dom.correctAnswerDisplay.textContent = q.answer;
+    dom.correctAnswerDisplay.textContent = correctAnsStr; 
 
     dom.aiFeedback.textContent = feedback;
 
-    // For gas update later
     state.answersContext.push({
         row: q.row,
-        question: q.question,
+        question: genData.question,
         userAnswer: userAnswer,
         score: score,
         feedback: feedback
@@ -352,10 +440,9 @@ function showResult(userAnswer, score, feedback) {
     switchView('result');
 }
 
-function showNextQuestion() {
+async function showNextQuestion() {
     state.currentQuestionIndex++;
-    renderQuizQuestion();
-    switchView('quiz');
+    await generateAndShowQuestion();
 }
 
 async function finishQuiz() {

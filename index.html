@@ -76,8 +76,10 @@
                 </div>
 
                 <div class="answer-section">
-                    <textarea id="answer-input" placeholder="ここに回答を入力してください..." rows="5"></textarea>
-                    <button id="submit-answer-btn" class="primary-btn">
+                    <div id="choices-container" class="choices-container">
+                        <!-- Choices will be injected here -->
+                    </div>
+                    <button id="submit-answer-btn" class="primary-btn" disabled>
                         <span>回答を送信</span>
                         <i class='bx bx-send'></i>
                     </button>
@@ -88,8 +90,8 @@
             <section id="loading-view" class="view">
                 <div class="glass-card loading-card">
                     <div class="spinner"></div>
-                    <h2>AIが添削中...</h2>
-                    <p>Geminiがあなたの回答を分析しています。少々お待ちください。</p>
+                    <h2 id="loading-title">AIが処理中...</h2>
+                    <p id="loading-desc">Geminiが最適な問題を生成しています。少々お待ちください。</p>
                 </div>
             </section>
 

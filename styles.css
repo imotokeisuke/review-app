@@ -313,23 +313,100 @@ button:disabled {
     font-weight: 500;
 }
 
-.answer-section textarea {
-    width: 100%;
-    background: rgba(255, 255, 255, 0.7);
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    padding: 16px;
-    color: var(--text-main);
-    font-size: 1rem;
-    font-family: inherit;
-    resize: vertical;
-    transition: var(--transition);
+/* Choices Container */
+.choices-container {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin-bottom: 24px;
 }
 
-.answer-section textarea:focus {
-    outline: none;
+.choice-card {
+    background: rgba(255, 255, 255, 0.7);
+    border: 2px solid var(--border);
+    border-radius: 12px;
+    padding: 16px;
+    cursor: pointer;
+    transition: var(--transition);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.choice-card:hover {
+    background: rgba(255, 255, 255, 0.95);
     border-color: var(--primary);
-    box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.2);
+    transform: translateY(-2px);
+}
+
+.choice-card.selected {
+    background: rgba(99, 102, 241, 0.05);
+    border-color: var(--primary);
+}
+
+.choice-card.correct-ans {
+    background: rgba(16, 185, 129, 0.1);
+    border-color: var(--success);
+}
+
+.choice-card.incorrect-ans {
+    background: rgba(239, 68, 68, 0.1);
+    border-color: #ef4444; 
+}
+
+.choice-card.missed-ans {
+    border: 2px dashed var(--success);
+}
+
+.choice-checkbox {
+    width: 24px;
+    height: 24px;
+    border-radius: 6px;
+    border: 2px solid var(--text-muted);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    transition: var(--transition);
+    color: transparent;
+    font-size: 1.2rem;
+}
+
+.choice-card.selected .choice-checkbox {
+    background: var(--primary);
+    border-color: var(--primary);
+    color: white;
+}
+
+.choice-card.correct-ans .choice-checkbox {
+    background: var(--success);
+    border-color: var(--success);
+    color: white;
+}
+
+.choice-card.incorrect-ans .choice-checkbox {
+    background: #ef4444;
+    border-color: #ef4444;
+    color: white;
+}
+
+.choice-text {
+    font-size: 1.05rem;
+    line-height: 1.5;
+    flex: 1;
+}
+
+.choice-status-icon {
+    font-size: 1.5rem;
+    display: none;
+}
+
+.choice-card.correct-ans .choice-status-icon.bx-check-circle { 
+    display: block; 
+    color: var(--success); 
+}
+.choice-card.incorrect-ans .choice-status-icon.bx-x-circle { 
+    display: block; 
+    color: #ef4444; 
 }
 
 /* Loading View */
