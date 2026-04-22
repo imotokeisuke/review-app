@@ -44,9 +44,8 @@ const dom = {
     resCurrentQNum: document.getElementById('res-current-q-num'),
     resTotalQNum: document.getElementById('res-total-q-num'),
     aiScore: document.getElementById('ai-score'),
-    aiFeedback: document.getElementById('ai-feedback-text'),
-    userAnswerDisplay: document.getElementById('user-answer-display'),
-    correctAnswerDisplay: document.getElementById('correct-answer-display'),
+    optionsDisplay: document.getElementById('options-display'),
+    explanationDisplay: document.getElementById('explanation-display'),
     nextBtn: document.getElementById('next-question-btn'),
     finishBtn: document.getElementById('finish-quiz-btn'),
 
@@ -290,20 +289,46 @@ async function generateAndShowQuestion() {
 `;
 
     try {
-        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${state.settings.geminiKey}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                contents: [{ parts: [{ text: promptText }] }],
-                generationConfig: { responseMimeType: "application/json" }
-            })
-        });
+        let response;
+        let retryCount = 0;
+        const maxRetries = 3;
 
-        if (!response.ok) throw new Error('Gemini API Error');
+        while (retryCount < maxRetries) {
+            const apiVersion = 'v1beta';
+            const modelName = 'gemini-2.5-flash';
+            response = await fetch(`https://generativelanguage.googleapis.com/${apiVersion}/models/${modelName}:generateContent?key=${state.settings.geminiKey}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    contents: [{ parts: [{ text: promptText }] }]
+                })
+            });
+
+            if (response.ok) break; 
+            
+            if (response.status === 404) {
+                console.error(`Error 404: Model "${modelName}" not found at endpoint "${apiVersion}". Try checking if the model name or API version is correct for your region/project.`);
+            }
+            
+            console.warn(`API Error (Status: ${response.status}). Retrying... (${retryCount + 1}/${maxRetries})`);
+            retryCount++;
+            await new Promise(r => setTimeout(r, 2000)); // リトライ間隔を少し延長
+        }
+
+        if (!response.ok) {
+            const errorBody = await response.text();
+            throw new Error(`Gemini API Error: Status ${response.status} - ${errorBody}`);
+        }
         const data = await response.json();
-        
         const candidateText = data.candidates[0].content.parts[0].text;
-        state.currentGeneratedData = JSON.parse(candidateText);
+        const startIndex = candidateText.indexOf('{');
+        const endIndex = candidateText.lastIndexOf('}');
+        if (startIndex !== -1 && endIndex !== -1) {
+            const jsonStr = candidateText.substring(startIndex, endIndex + 1);
+            state.currentGeneratedData = JSON.parse(jsonStr);
+        } else {
+            throw new Error('JSON data not found in response: ' + candidateText);
+        }
         
     } catch (error) {
         console.error('AI error:', error);
@@ -416,10 +441,17 @@ function showResult(userAnswer, correctAnsStr, score, feedback) {
     dom.quizProgress.style.width = `${progressPercent}%`;
 
     dom.aiScore.textContent = score;
-    dom.userAnswerDisplay.textContent = userAnswer;
-    dom.correctAnswerDisplay.textContent = correctAnsStr; 
 
-    dom.aiFeedback.textContent = feedback;
+    // 選択肢の表示
+    const correctSet = new Set(genData.correctIndices);
+    dom.optionsDisplay.innerHTML = genData.choices.map((choice, i) => {
+        const isCorrect = correctSet.has(i);
+        const icon = isCorrect ? "<i class='bx bx-check-circle' style='color: var(--success);'></i>" : "";
+        const style = isCorrect ? "font-weight: bold; color: var(--text);" : "color: var(--text-muted);";
+        return `<li style="margin-bottom: 4px; ${style}">${icon} ${choice}</li>`;
+    }).join('');
+
+    dom.explanationDisplay.textContent = feedback;
 
     state.answersContext.push({
         row: q.row,
@@ -538,7 +570,7 @@ function renderList() {
 
         const actionBtn = isCompleted
             ? `<button class="reset-btn" onclick="markIncomplete(${q.row})"><i class='bx bx-reset'></i>未完了に戻す</button>`
-            : ``;
+            : `<button class="primary-btn" style="padding: 4px 10px; font-size: 0.8rem;" onclick="startSpecificQuiz(${q.row})"><i class='bx bx-play'></i>復習する</button>`;
 
         const statusBadge = isCompleted
             ? `<span class="status-badge success">完了</span>`
@@ -595,4 +627,21 @@ window.markIncomplete = async function (rowNum) {
         btn.innerHTML = originalText;
         btn.disabled = false;
     }
+};
+
+window.startSpecificQuiz = async function (rowNum) {
+    // 該当のトピックを探す
+    const targetQ = state.rawQuestions.find(q => q.row === rowNum);
+    if (!targetQ) return;
+
+    // リストモーダルを閉じる
+    dom.listModal.classList.remove('open');
+
+    // クイズ対象をこの1問だけにする
+    state.quizQuestions = [targetQ];
+    
+    // クイズを開始
+    state.currentQuestionIndex = 0;
+    state.answersContext = [];
+    await generateAndShowQuestion();
 };
